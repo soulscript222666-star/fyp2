@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tradify — Smart Trading & Analysis Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+
+<!-- ██ FIREBASE SDK ██ -->
+<script type="module">
+  import { initializeApp }         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+           signOut, onAuthStateChanged, updateProfile }
+           from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { getFirestore, collection, addDoc, getDocs, doc, updateDoc,
+           increment, onSnapshot, query, orderBy, serverTimestamp, getDoc, setDoc }
+           from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  /* ── FIREBASE CONFIG (first-project-cd4ff) ── */
+  const firebaseConfig = {
+    apiKey:            "AIzaSyCQ3VZpwfdMHm_qOvUN0UXTAhdzomRPGIc",
+    authDomain:        "first-project-cd4ff.firebaseapp.com",
+    projectId:         "first-project-cd4ff",
+    storageBucket:     "first-project-cd4ff.firebasestorage.app",
+    messagingSenderId: "860233609295",
+    appId:             "1:860233609295:web:68df1c0a46f53dcfd8fa3a",
+    measurementId:     "G-JL1RJ5HTSR"
+  };
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  /* expose globally */
+  window.__auth = auth;
+  window.__db   = db;
+  window.__fb   = { collection, addDoc, getDocs, doc, updateDoc, increment,
+                    onSnapshot, query, orderBy, serverTimestamp, getDoc, setDoc,
+                    createUserWithEmailAndPassword, signInWithEmailAndPassword,
+                    signOut, updateProfile };
+
+  /* mark Firebase as ready */
+  window.__firebaseReady = true;
+
+  /* ── auth state listener ── */
+  onAuthStateChanged(auth, user => {
+    window.__user = user || null;
+    window.dispatchEvent(new CustomEvent('auth-change', { detail: user }));
+  });
+
+  /* ── real-time blog listener ── */
+  const blogsQ = query(collection(db,'blogs'), orderBy('ts','desc'));
+  onSnapshot(blogsQ, snap => {
+    window.__fbBlogs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    window.renderBlogs && window.renderBlogs('blogGrid');
+    window.renderBlogs && window.renderBlogs('homeBlogGrid',3);
+    const el = document.getElementById('fbStatus');
+    if(el){ el.textContent='🔥 Firebase Live'; el.style.color='var(--gold)'; }
+  }, () => {
+    const el = document.getElementById('fbStatus');
+    if(el){ el.textContent='⚡ Local Mode'; el.style.color='var(--muted)'; }
+  });
+</script>
+
+<style>
+:root{
+  --bg:#060810;--bg2:#0d1117;--bg3:#111827;
+  --card:#141c2e;--card2:#1a2540;
+  --gold:#f5c842;--gold2:#e6a817;
+  --cyan:#00d4ff;--green:#00e676;--red:#ff4444;--purple:#7c5cbf;
+  --border:rgba(245,200,66,0.15);--border2:rgba(0,212,255,0.15);
+  --text:#e8eaf0;--muted:#6b7a99;
+  --mono:'Space Mono',monospace;--head:'Syne',sans-serif;--body:'Space Grotesk',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.6;overflow-x:hidden}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg2)}::-webkit-scrollbar-thumb{background:var(--gold);border-radius:3px}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:999;background:rgba(6,8,16,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:62px}
+.logo{font-family:var(--head);font-size:1.6rem;font-weight:800;color:var(--gold);letter-spacing:-0.03em;cursor:pointer}
+.logo span{color:var(--cyan)}
+.nav-links{display:flex;gap:0.2rem;align-items:center}
+.nav-links a{color:var(--muted);text-decoration:none;padding:0.4rem 0.85rem;border-radius:6px;font-size:0.88rem;font-weight:500;transition:all .2s;cursor:pointer}
+.nav-links a:hover,.nav-links a.active{color:var(--text);background:var(--card2)}
+.nav-right{display:flex;gap:0.6rem;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:0.4rem;padding:0.45rem 1.1rem;border-radius:7px;font-family:var(--body);font-weight:600;font-size:0.88rem;cursor:pointer;transition:all .2s;text-decoration:none;border:none}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000}
+.btn-gold:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(245,200,66,0.3)}
+.btn-red{background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.3);color:var(--red)}
+.btn-red:hover{background:rgba(255,68,68,0.2)}
+.btn-cyan{background:rgba(0,212,255,0.1);border:1px solid var(--border2);color:var(--cyan)}
+.btn-cyan:hover{background:rgba(0,212,255,0.18)}
+
+/* ── PAGES ── */
+.page{display:none;min-height:100vh;padding-top:62px}
+.page.active{display:block}
+
+/* ── HERO ── */
+#hero{min-height:calc(100vh - 62px);display:flex;flex-direction:column;justify-content:center;align-items:center;padding:4rem 2rem 3rem;position:relative;overflow:hidden;text-align:center}
+.hero-bg{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(245,200,66,0.07) 0%,transparent 70%),radial-gradient(ellipse 50% 50% at 80% 60%,rgba(0,212,255,0.05) 0%,transparent 60%);pointer-events:none}
+.ticker-wrap{overflow:hidden;white-space:nowrap;margin-bottom:3rem}
+.ticker-scroll{display:inline-flex;gap:3rem;animation:scroll-left 30s linear infinite}
+@keyframes scroll-left{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.ticker-wrap:hover .ticker-scroll{animation-play-state:paused}
+.tick-item{display:flex;gap:0.5rem;align-items:center;flex-shrink:0;font-family:var(--mono);font-size:0.82rem}
+.tick-name{color:var(--muted)}.tick-price{color:var(--text);font-weight:700}
+.tick-up{color:var(--green)}.tick-dn{color:var(--red)}
+.hero-content{max-width:780px;display:flex;flex-direction:column;align-items:center}
+.hero-eyebrow{font-family:var(--mono);font-size:0.78rem;color:var(--cyan);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:1.2rem;display:flex;align-items:center;justify-content:center;gap:0.6rem}
+.hero-eyebrow::before{content:'';width:28px;height:1px;background:var(--cyan)}
+h1.hero-title{font-family:var(--head);font-size:clamp(2.8rem,6vw,5.2rem);font-weight:800;line-height:1.0;letter-spacing:-0.04em;margin-bottom:1.4rem}
+h1.hero-title .g{color:var(--gold)}h1.hero-title .c{color:var(--cyan)}
+.hero-sub{color:var(--muted);font-size:1.1rem;max-width:560px;margin-bottom:2.4rem;line-height:1.7;text-align:center}
+.hero-ctas{display:flex;gap:0.8rem;flex-wrap:wrap;margin-bottom:3rem;justify-content:center}
+.hero-stats{display:flex;gap:3rem;flex-wrap:wrap;justify-content:center}
+.stat-item{display:flex;flex-direction:column;gap:0.2rem}
+.stat-num{font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--gold)}
+.stat-label{font-size:0.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em}
+
+/* ── SECTIONS ── */
+.section{padding:4rem 2rem}.section-inner{max-width:1200px;margin:0 auto}
+.section-header{margin-bottom:2.5rem}
+.eyebrow{font-family:var(--mono);font-size:0.75rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.6rem}
+h2.section-title{font-family:var(--head);font-size:clamp(1.7rem,3.5vw,2.5rem);font-weight:800;letter-spacing:-0.03em;line-height:1.1}
+h2.section-title .g{color:var(--gold)}
+.divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:0 2rem}
+
+/* ── CHARTS ── */
+.chart-card{background:var(--card);border:1px solid var(--border2);border-radius:14px;overflow:hidden}
+.chart-card-header{padding:1rem 1.2rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;border-bottom:1px solid rgba(255,255,255,0.05)}
+.chart-card-title{display:flex;align-items:center;gap:0.6rem;font-family:var(--mono);font-weight:700;font-size:0.92rem}
+.chart-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.chart-tabs{display:flex;gap:0.3rem}
+.chart-tab{padding:0.25rem 0.6rem;border-radius:5px;font-family:var(--mono);font-size:0.75rem;cursor:pointer;color:var(--muted);background:transparent;border:none;transition:all .15s}
+.chart-tab.active,.chart-tab:hover{background:var(--card2);color:var(--gold)}
+
+/* ── CHART FULLSCREEN + RESIZE ── */
+.chart-fs-wrap{position:relative;transition:all .3s cubic-bezier(.4,0,.2,1)}
+.chart-fs-wrap.fullscreen{position:fixed;inset:0;z-index:1500;background:var(--bg);display:flex;flex-direction:column}
+.chart-fs-wrap.fullscreen .chart-card{flex:1;border-radius:0;border:none;display:flex;flex-direction:column}
+.chart-fs-wrap.fullscreen #chartEmbedDiv{flex:1 !important;height:auto !important}
+.chart-fs-wrap.fullscreen #tvWidgetContainer{height:100% !important}
+.chart-ctrl-btn{display:inline-flex;align-items:center;gap:0.3rem;padding:0.26rem 0.65rem;border-radius:6px;background:var(--card2);border:1px solid var(--border2);color:var(--cyan);font-family:var(--mono);font-size:0.74rem;cursor:pointer;transition:all .18s;white-space:nowrap}
+.chart-ctrl-btn:hover{background:rgba(0,212,255,0.14);border-color:var(--cyan)}
+.chart-ctrl-btn.active{background:rgba(245,200,66,0.12);border-color:var(--gold);color:var(--gold)}
+.chart-analysis-bar{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:0.55rem 1.2rem;background:rgba(0,0,0,0.25);border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--mono);font-size:0.74rem;color:var(--muted)}
+.chart-analysis-bar .cab-label{color:var(--cyan);font-weight:700;margin-right:0.2rem}
+.chart-analysis-bar .cab-time{color:var(--gold)}
+.chart-analysis-bar .cab-sep{opacity:0.3}
+.resize-bar{display:flex;align-items:center;justify-content:center;padding:0.3rem;background:var(--bg2);border-top:1px solid var(--border);cursor:ns-resize;color:var(--muted);font-size:0.7rem;font-family:var(--mono);user-select:none;transition:background .15s}
+.resize-bar:hover{background:var(--card2);color:var(--gold)}
+
+/* ── ASSET TABS ── */
+.asset-tabs{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.5rem}
+.asset-tab{padding:0.45rem 1rem;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all .2s}
+.asset-tab.active,.asset-tab:hover{border-color:var(--gold);color:var(--gold);background:rgba(245,200,66,0.06)}
+
+/* ── WATCHLIST ── */
+.watchlist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-bottom:2rem}
+.wl-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem 1.2rem;cursor:pointer;transition:all .2s}
+.wl-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+.wl-sym{font-family:var(--mono);font-weight:700;font-size:0.95rem;color:var(--text);margin-bottom:0.2rem}
+.wl-name{font-size:0.78rem;color:var(--muted);margin-bottom:0.8rem}
+.wl-price{font-family:var(--mono);font-size:1.15rem;font-weight:700;margin-bottom:0.2rem}
+.wl-change{font-family:var(--mono);font-size:0.82rem}
+.up{color:var(--green)}.dn{color:var(--red)}
+
+/* ── BLOG ── */
+.blog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1.5rem}
+.blog-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:all .2s;display:flex;flex-direction:column}
+.blog-card:hover{border-color:var(--cyan);transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,212,255,0.08)}
+.blog-card-img{height:170px;background:linear-gradient(135deg,var(--bg2),var(--card2));display:flex;align-items:center;justify-content:center;font-size:3rem;position:relative}
+.blog-tag{position:absolute;top:0.8rem;left:0.8rem;padding:0.2rem 0.6rem;border-radius:5px;font-size:0.72rem;font-weight:700;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em}
+.tag-gold{background:rgba(245,200,66,0.15);color:var(--gold);border:1px solid rgba(245,200,66,0.3)}
+.tag-btc{background:rgba(247,147,26,0.15);color:#f7931a;border:1px solid rgba(247,147,26,0.3)}
+.tag-forex{background:rgba(0,212,255,0.12);color:var(--cyan);border:1px solid rgba(0,212,255,0.3)}
+.tag-stock{background:rgba(0,230,118,0.12);color:var(--green);border:1px solid rgba(0,230,118,0.3)}
+.tag-analysis{background:rgba(124,92,191,0.15);color:#b39ddb;border:1px solid rgba(124,92,191,0.3)}
+.blog-body{padding:1.2rem;flex:1;display:flex;flex-direction:column}
+.blog-meta{display:flex;gap:1rem;font-size:0.76rem;color:var(--muted);font-family:var(--mono);margin-bottom:0.7rem;flex-wrap:wrap}
+.blog-title{font-family:var(--head);font-size:1.05rem;font-weight:700;margin-bottom:0.6rem;line-height:1.3;color:var(--text)}
+.blog-excerpt{font-size:0.85rem;color:var(--muted);line-height:1.6;flex:1;margin-bottom:1rem}
+.blog-footer{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.05);padding-top:0.8rem;margin-top:auto}
+.blog-author{display:flex;align-items:center;gap:0.5rem;font-size:0.8rem;color:var(--muted)}
+.avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:#000}
+.blog-likes{display:flex;align-items:center;gap:0.3rem;font-family:var(--mono);font-size:0.78rem;color:var(--muted);cursor:pointer;transition:color .15s}
+.blog-likes:hover{color:var(--red)}
+
+/* ── BLOG FILTER ── */
+.filter-bar{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.8rem;align-items:center}
+.search-input{flex:1;min-width:200px;padding:0.5rem 1rem;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--body);font-size:0.88rem;outline:none;transition:border-color .2s}
+.search-input:focus{border-color:var(--cyan)}
+.search-input::placeholder{color:var(--muted)}
+.filter-btn{padding:0.45rem 0.9rem;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:0.83rem;cursor:pointer;transition:all .2s}
+.filter-btn.active,.filter-btn:hover{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,0.06)}
+
+/* ── MODALS ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:2000;align-items:center;justify-content:center;padding:1rem}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:2rem}
+.modal-wide{max-width:680px}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem}
+.modal-title{font-family:var(--head);font-size:1.3rem;font-weight:800}
+.modal-close{background:var(--card2);border:none;color:var(--muted);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:1.1rem;transition:color .15s}
+.modal-close:hover{color:var(--text)}
+.form-group{margin-bottom:1.2rem}
+.form-label{display:block;font-size:0.82rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.06em;font-family:var(--mono)}
+.form-input,.form-select,.form-textarea{width:100%;padding:0.65rem 1rem;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--body);font-size:0.9rem;outline:none;transition:border-color .2s}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--cyan)}
+.form-select{appearance:none}
+.form-textarea{min-height:130px;resize:vertical;line-height:1.6}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.form-divider{text-align:center;margin:1rem 0;color:var(--muted);font-size:0.85rem;position:relative}
+.form-divider::before,.form-divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:var(--border)}
+.form-divider::before{left:0}.form-divider::after{right:0}
+
+/* ── AUTH TAB ── */
+.auth-tabs{display:flex;background:var(--card);border-radius:10px;padding:0.25rem;margin-bottom:1.5rem;gap:0.25rem}
+.auth-tab{flex:1;padding:0.55rem;text-align:center;border-radius:7px;cursor:pointer;font-weight:600;font-size:0.88rem;transition:all .2s;border:none;background:transparent;color:var(--muted)}
+.auth-tab.active{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000}
+.auth-error{color:var(--red);font-size:0.82rem;margin-bottom:0.8rem;font-family:var(--mono);display:none}
+.auth-error.show{display:block}
+.user-badge{display:inline-flex;align-items:center;gap:0.5rem;padding:0.3rem 0.8rem;background:rgba(0,212,255,0.08);border:1px solid var(--border2);border-radius:8px;font-size:0.82rem;cursor:pointer}
+.user-badge .ub-avatar{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#000}
+
+/* ── DATA TABLE ── */
+.data-table{width:100%;border-collapse:collapse;font-size:0.88rem}
+.data-table th{text-align:left;padding:0.7rem 1rem;font-family:var(--mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--bg2)}
+.data-table td{padding:0.8rem 1rem;border-bottom:1px solid rgba(255,255,255,0.03)}
+.data-table tr:hover td{background:var(--card2)}
+.data-table .sym{font-family:var(--mono);font-weight:700;color:var(--text)}
+.data-table .price{font-family:var(--mono)}
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:2rem}
+
+/* ── LIVE BADGE ── */
+.live-badge{display:inline-flex;align-items:center;gap:0.4rem;padding:0.2rem 0.6rem;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.25);border-radius:5px;font-family:var(--mono);font-size:0.73rem;color:var(--green)}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}
+.fb-badge{display:inline-flex;align-items:center;gap:0.3rem;padding:0.2rem 0.6rem;background:rgba(245,200,66,0.07);border:1px solid var(--border);border-radius:5px;font-family:var(--mono);font-size:0.72rem;color:var(--muted)}
+
+/* ── NOTIFICATION ── */
+.notif{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:0.9rem 1.2rem;font-size:0.88rem;z-index:9999;transform:translateY(100px);opacity:0;transition:all .3s;max-width:300px}
+.notif.show{transform:translateY(0);opacity:1}
+.notif .notif-icon{color:var(--green);margin-right:0.4rem}
+
+/* ── ABOUT ── */
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center}
+.about-text p{color:var(--muted);line-height:1.8;margin-bottom:1rem}
+.feature-list{list-style:none;display:flex;flex-direction:column;gap:0.8rem}
+.feature-list li{display:flex;align-items:flex-start;gap:0.7rem;font-size:0.9rem;color:var(--muted)}
+.feature-list li::before{content:'◆';color:var(--gold);font-size:0.6rem;margin-top:0.35rem;flex-shrink:0}
+.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1.5rem}
+.team-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.5rem;text-align:center}
+.team-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin:0 auto 1rem;border:2px solid var(--border)}
+.team-name{font-family:var(--head);font-size:1rem;font-weight:700;margin-bottom:0.2rem}
+.team-roll{font-family:var(--mono);font-size:0.75rem;color:var(--muted)}
+.team-role{font-size:0.82rem;color:var(--cyan);margin-top:0.3rem}
+
+/* ── FOOTER ── */
+footer{background:var(--bg2);border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center}
+.footer-logo{font-family:var(--head);font-size:1.4rem;font-weight:800;color:var(--gold);margin-bottom:0.5rem}
+.footer-sub{color:var(--muted);font-size:0.85rem;margin-bottom:1.5rem}
+.footer-links{display:flex;gap:1.5rem;justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem}
+.footer-links a{color:var(--muted);text-decoration:none;font-size:0.85rem;transition:color .15s;cursor:pointer}
+.footer-links a:hover{color:var(--gold)}
+.footer-copy{color:var(--muted);font-size:0.78rem;font-family:var(--mono)}
+
+/* ── AUTH PAGE ── */
+#page-auth{background:var(--bg);display:none;min-height:100vh;padding-top:62px;align-items:center;justify-content:center}
+#page-auth.active{display:flex}
+.auth-card{width:100%;max-width:440px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:2.5rem;position:relative;overflow:hidden}
+.auth-card::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(245,200,66,0.08),transparent 70%);pointer-events:none}
+.auth-logo{font-family:var(--head);font-size:2rem;font-weight:800;color:var(--gold);text-align:center;margin-bottom:0.3rem}
+.auth-logo span{color:var(--cyan)}
+.auth-sub{text-align:center;color:var(--muted);font-size:0.88rem;margin-bottom:1.8rem}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .nav-links{display:none}
+  .hero-stats{gap:1.5rem}
+  .form-row{grid-template-columns:1fr}
+  .watchlist-grid{grid-template-columns:repeat(2,1fr)}
+  .blog-grid{grid-template-columns:1fr}
+  .about-grid{grid-template-columns:1fr}
+  .auth-card{margin:1rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ██ NAV ██ -->
+<nav>
+  <div class="logo" onclick="showPage('home')">Trad<span>ify</span></div>
+  <div class="nav-links">
+    <a onclick="showPage('home')" id="nav-home" class="active">Home</a>
+    <a onclick="showPage('markets')" id="nav-markets">Markets</a>
+    <a onclick="showPage('charts')" id="nav-charts">Live Charts</a>
+    <a onclick="showPage('blog')" id="nav-blog">Blog</a>
+    <a onclick="showPage('about')" id="nav-about">About</a>
+  </div>
+  <div class="nav-right">
+    <span class="live-badge"><span class="live-dot"></span>Markets Live</span>
+    <span class="fb-badge" id="fbStatus">⏳ Connecting…</span>
+    <div id="navAuthArea">
+      <button class="btn btn-outline" onclick="showPage('auth')" style="font-size:0.82rem">🔐 Login</button>
+      <button class="btn btn-gold" onclick="openModal()" style="display:none" id="writeBlogBtn">✍ Write Blog</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ██████████ HOME PAGE ██████████ -->
+<div id="page-home" class="page active">
+  <div id="hero">
+    <div class="hero-bg"></div>
+    <div class="ticker-wrap"><div class="ticker-scroll" id="tickerScroll"></div></div>
+    <div class="hero-content">
+      <div class="hero-eyebrow">UAP ICS/IT · Final Year Project 2022–2026</div>
+      <h1 class="hero-title">Trade Smarter.<br><span class="g">Analyze</span> Deeper.<br><span class="c">Blog</span> Better.</h1>
+      <p class="hero-sub">Tradify combines live market charts, real-time asset tracking, and a trading-focused blogging community — all in one platform. Gold, Bitcoin, Forex, Stocks. Everything.</p>
+      <div class="hero-ctas">
+        <button class="btn btn-gold" onclick="showPage('markets')">📊 Explore Markets</button>
+        <button class="btn btn-outline" onclick="showPage('charts')">📈 Live Charts</button>
+        <button class="btn btn-outline" onclick="showPage('blog')">📝 Read Blogs</button>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-item"><span class="stat-num">50+</span><span class="stat-label">Assets Tracked</span></div>
+        <div class="stat-item"><span class="stat-num">∞</span><span class="stat-label">Live Data</span></div>
+        <div class="stat-item"><span class="stat-num">100%</span><span class="stat-label">Risk Free</span></div>
+        <div class="stat-item"><span class="stat-num">MERN</span><span class="stat-label">Stack Built</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="padding-top:2rem">
+    <div class="section-inner">
+      <div class="section-header">
+        <div class="eyebrow">Live Watchlist</div>
+        <h2 class="section-title">Track Your <span class="g">Favorites</span></h2>
+      </div>
+      <div class="watchlist-grid" id="homeWatchlist"></div>
+      <button class="btn btn-outline" onclick="showPage('markets')">View All Markets →</button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section">
+    <div class="section-inner">
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
+        <div><div class="eyebrow">Latest Analysis</div><h2 class="section-title">From the <span class="g">Community</span></h2></div>
+        <button class="btn btn-outline" onclick="showPage('blog')">All Blogs →</button>
+      </div>
+      <div class="blog-grid" id="homeBlogGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ██████████ MARKETS PAGE ██████████ -->
+<div id="page-markets" class="page">
+  <div class="section">
+    <div class="section-inner">
+      <div class="section-header">
+        <div class="eyebrow">Real-Time Data</div>
+        <h2 class="section-title">Market <span class="g">Overview</span></h2>
+        <p style="color:var(--muted);margin-top:0.5rem;font-size:0.9rem">Live prices updated every 4 seconds. Click any asset to view its chart.</p>
+      </div>
+      <div class="asset-tabs" id="marketTabs">
+        <button class="asset-tab active" onclick="filterMarket('all',this)">All</button>
+        <button class="asset-tab" onclick="filterMarket('crypto',this)">🪙 Crypto</button>
+        <button class="asset-tab" onclick="filterMarket('gold',this)">🥇 Gold & Silver</button>
+        <button class="asset-tab" onclick="filterMarket('forex',this)">💱 Forex</button>
+        <button class="asset-tab" onclick="filterMarket('stocks',this)">📈 Stocks</button>
+        <button class="asset-tab" onclick="filterMarket('indices',this)">📊 Indices</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>#</th><th>Asset</th><th>Category</th><th>Price (USD)</th><th>24h Change</th><th>24h High</th><th>24h Low</th><th>Volume</th><th>Chart</th></tr></thead>
+          <tbody id="marketTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ██████████ CHARTS PAGE (Page 3) ██████████ -->
+<div id="page-charts" class="page">
+  <div style="padding:2rem 1.5rem 0">
+    <div class="section-header">
+      <div class="eyebrow">TradingView Powered</div>
+      <h2 class="section-title">Live <span class="g">Charts</span></h2>
+    </div>
+
+    <!-- Asset selector tabs -->
+    <div class="asset-tabs" id="chartAssetTabs">
+      <button class="asset-tab active" onclick="loadChart('XAUUSD','Gold / USD',this)">🥇 Gold</button>
+      <button class="asset-tab" onclick="loadChart('BTCUSD','Bitcoin / USD',this)">₿ Bitcoin</button>
+      <button class="asset-tab" onclick="loadChart('ETHUSD','Ethereum / USD',this)">Ξ Ethereum</button>
+      <button class="asset-tab" onclick="loadChart('EURUSD','EUR / USD',this)">€ EUR/USD</button>
+      <button class="asset-tab" onclick="loadChart('GBPUSD','GBP / USD',this)">£ GBP/USD</button>
+      <button class="asset-tab" onclick="loadChart('USDPKR','USD / PKR',this)">🇵🇰 USD/PKR</button>
+      <button class="asset-tab" onclick="loadChart('AAPL','Apple Inc.',this)">🍎 AAPL</button>
+      <button class="asset-tab" onclick="loadChart('TSLA','Tesla Inc.',this)">⚡ TSLA</button>
+      <button class="asset-tab" onclick="loadChart('XAGUSD','Silver / USD',this)">🥈 Silver</button>
+      <button class="asset-tab" onclick="loadChart('SOLUSD','Solana / USD',this)">◎ SOL</button>
+    </div>
+  </div>
+
+  <!-- ██ CHART 1 — MAIN with fullscreen + drag resize — FULL WIDTH ██ -->
+  <div style="padding:0 1.5rem">
+    <div id="chartFsWrap" class="chart-fs-wrap" style="width:100%">
+      <div class="chart-card" style="border-radius:12px">
+        <div class="chart-card-header">
+          <div class="chart-card-title">
+            <span class="chart-dot"></span>
+            <span id="chartTitle">Gold / USD — XAUUSD</span>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+            <span class="live-badge"><span class="live-dot"></span>Live</span>
+            <div class="chart-tabs">
+              <button class="chart-tab" onclick="setTVInterval('1',this)">1m</button>
+              <button class="chart-tab" onclick="setTVInterval('5',this)">5m</button>
+              <button class="chart-tab" onclick="setTVInterval('60',this)">1H</button>
+              <button class="chart-tab active" onclick="setTVInterval('D',this)">1D</button>
+              <button class="chart-tab" onclick="setTVInterval('W',this)">1W</button>
+            </div>
+            <button class="chart-ctrl-btn" id="btnMini" onclick="toggleMiniChart()">⊟ Mini</button>
+            <button class="chart-ctrl-btn" onclick="toggleChartHistory()">🕐 History</button>
+            <button class="chart-ctrl-btn" id="btnFs" onclick="toggleFullscreen()">⤢ Fullscreen</button>
+          </div>
+        </div>
+        <!-- resizable embed -->
+        <div id="chartEmbedDiv" style="height:600px;transition:height .32s ease;width:100%">
+          <div class="chart-analysis-bar" id="chartAnalysisBar">
+            <span><span class="cab-label">📅 Viewed:</span> <span class="cab-time" id="cabViewedTime">—</span></span>
+            <span class="cab-sep">|</span>
+            <span><span class="cab-label">Asset:</span> <span id="cabAsset">Gold / USD</span></span>
+            <span class="cab-sep">|</span>
+            <span><span class="cab-label">Interval:</span> <span id="cabInterval">1D</span></span>
+            <span class="cab-sep">|</span>
+            <span><span class="cab-label">Session:</span> <span id="cabSession">—</span></span>
+            <span class="cab-sep">|</span>
+            <span><span class="cab-label">Timezone:</span> <span style="color:var(--text)">Asia/Karachi (PKT)</span></span>
+          </div>
+          <!-- Chart Analysis History Panel -->
+          <div id="chartHistoryPanel" style="display:none;background:var(--card2);border-bottom:1px solid var(--border);padding:0.8rem 1.2rem;max-height:200px;overflow-y:auto">
+            <div style="font-family:var(--mono);font-size:0.72rem;color:var(--gold);font-weight:700;margin-bottom:0.5rem;letter-spacing:0.06em">🕐 CHART ANALYSIS HISTORY — THIS SESSION</div>
+            <div id="chartHistoryList"><div style="color:var(--muted);font-size:0.8rem">No history yet. Open a chart to begin.</div></div>
+          </div>
+          <div id="tvWidgetContainer" style="height:100%;width:100%"></div>
+        </div>
+        <!-- drag handle -->
+        <div class="resize-bar" id="resizeBar" title="Drag to resize chart">⠿ drag to resize ⠿</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding:1.8rem 1.5rem 3rem">
+    <!-- ██ CHART 2 — Quick Charts Grid (3 charts) ██ -->
+    <div style="margin-bottom:1.8rem">
+      <div class="eyebrow" style="margin-bottom:1rem">Quick Charts</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:1rem">
+
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-card-title"><span class="chart-dot"></span>Bitcoin (BTC/USD)</div>
+            <span class="live-badge" style="font-size:0.68rem"><span class="live-dot"></span>Live</span>
+          </div>
+          <div style="height:280px">
+            <iframe src="https://s.tradingview.com/widgetembed/?frameElementId=tv_btc&symbol=BINANCE%3ABTCUSDT&interval=D&hidesidetoolbar=1&hidetoptoolbar=0&symboledit=0&saveimage=0&toolbarbg=0d1117&theme=dark&style=1&timezone=Asia%2FKarachi&withdateranges=1&hideideas=1" width="100%" height="100%" frameborder="0" allowtransparency="true"></iframe>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-card-title"><span class="chart-dot"></span>Gold (XAU/USD)</div>
+            <span class="live-badge" style="font-size:0.68rem"><span class="live-dot"></span>Live</span>
+          </div>
+          <div style="height:280px">
+            <iframe src="https://s.tradingview.com/widgetembed/?frameElementId=tv_gold&symbol=TVC%3AGOLD&interval=D&hidesidetoolbar=1&hidetoptoolbar=0&symboledit=0&saveimage=0&toolbarbg=0d1117&theme=dark&style=1&timezone=Asia%2FKarachi&withdateranges=1&hideideas=1" width="100%" height="100%" frameborder="0" allowtransparency="true"></iframe>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-card-title"><span class="chart-dot"></span>Ethereum (ETH/USD)</div>
+            <span class="live-badge" style="font-size:0.68rem"><span class="live-dot"></span>Live</span>
+          </div>
+          <div style="height:280px">
+            <iframe src="https://s.tradingview.com/widgetembed/?frameElementId=tv_eth&symbol=BINANCE%3AETHUSDT&interval=D&hidesidetoolbar=1&hidetoptoolbar=0&symboledit=0&saveimage=0&toolbarbg=0d1117&theme=dark&style=1&timezone=Asia%2FKarachi&withdateranges=1&hideideas=1" width="100%" height="100%" frameborder="0" allowtransparency="true"></iframe>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ██ CHART 3 — Market News Feed ██ -->
+    <div>
+      <div class="eyebrow" style="margin-bottom:1rem">📡 Market News Feed</div>
+      <div class="chart-card" style="overflow:hidden">
+        <iframe src="https://s.tradingview.com/embed-widget/timeline/?locale=en#%7B%22feedMode%22%3A%22market%22%2C%22market%22%3A%22crypto%22%2C%22isTransparent%22%3Atrue%2C%22displayMode%22%3A%22adaptive%22%2C%22width%22%3A%22100%25%22%2C%22height%22%3A%22420%22%2C%22colorTheme%22%3A%22dark%22%7D" width="100%" height="420" frameborder="0"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ██████████ BLOG PAGE ██████████ -->
+<div id="page-blog" class="page">
+  <div class="section">
+    <div class="section-inner">
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
+        <div><div class="eyebrow">Community Analysis</div><h2 class="section-title">Trading <span class="g">Blog</span></h2></div>
+        <button class="btn btn-gold" onclick="guardedOpenModal()">✍ Write Your Analysis</button>
+      </div>
+      <div class="filter-bar">
+        <input type="text" class="search-input" placeholder="🔍 Search blogs, assets, keywords..." id="blogSearch" oninput="renderBlogs('blogGrid')" />
+        <button class="filter-btn active" onclick="setBlogFilter('all',this)">All</button>
+        <button class="filter-btn" onclick="setBlogFilter('Gold',this)">🥇 Gold</button>
+        <button class="filter-btn" onclick="setBlogFilter('Bitcoin',this)">₿ BTC</button>
+        <button class="filter-btn" onclick="setBlogFilter('Forex',this)">💱 Forex</button>
+        <button class="filter-btn" onclick="setBlogFilter('Stocks',this)">📈 Stocks</button>
+        <button class="filter-btn" onclick="setBlogFilter('Analysis',this)">🔬 Analysis</button>
+      </div>
+      <div class="blog-grid" id="blogGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ██████████ AUTH PAGE (Login / Sign Up) ██████████ -->
+<div id="page-auth" class="page">
+  <div class="auth-card">
+    <div class="auth-logo">Trad<span>ify</span></div>
+    <div class="auth-sub">Pakistan's Trading Community Platform</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">🔐 Login</button>
+      <button class="auth-tab" id="tabSignup" onclick="switchAuthTab('signup')">🚀 Sign Up</button>
+    </div>
+
+    <div id="authError" class="auth-error"></div>
+
+    <!-- LOGIN FORM -->
+    <div id="loginForm">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" class="form-input" id="loginEmail" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" class="form-input" id="loginPassword" placeholder="Your password" />
+      </div>
+      <button class="btn btn-gold" style="width:100%;justify-content:center;padding:0.8rem;font-size:0.95rem;margin-top:0.5rem" onclick="doLogin()">
+        🔐 Login to Tradify
+      </button>
+      <div class="form-divider" style="margin-top:1.2rem">or</div>
+      <p style="text-align:center;font-size:0.85rem;color:var(--muted)">Don't have an account? <span style="color:var(--cyan);cursor:pointer" onclick="switchAuthTab('signup')">Sign up free →</span></p>
+    </div>
+
+    <!-- SIGNUP FORM -->
+    <div id="signupForm" style="display:none">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" class="form-input" id="signupName" placeholder="Ahmad Jamal" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input type="text" class="form-input" id="signupUsername" placeholder="ahmadjamal" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" class="form-input" id="signupEmail" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" class="form-input" id="signupPassword" placeholder="Min 6 characters" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input type="password" class="form-input" id="signupConfirm" placeholder="Repeat password" />
+      </div>
+      <button class="btn btn-gold" style="width:100%;justify-content:center;padding:0.8rem;font-size:0.95rem;margin-top:0.5rem" onclick="doSignup()">
+        🚀 Create Account
+      </button>
+      <div class="form-divider" style="margin-top:1.2rem">or</div>
+      <p style="text-align:center;font-size:0.85rem;color:var(--muted)">Already have an account? <span style="color:var(--gold);cursor:pointer" onclick="switchAuthTab('login')">Login →</span></p>
+    </div>
+
+    <div style="margin-top:1.5rem;padding:0.8rem;background:var(--card);border-radius:8px;font-size:0.78rem;color:var(--muted);font-family:var(--mono);line-height:1.6">
+      🔒 Secured by Firebase Authentication · JWT session management · Data stored in Firestore
+    </div>
+  </div>
+</div>
+
+<!-- ██████████ ABOUT PAGE ██████████ -->
+<div id="page-about" class="page">
+  <div class="section">
+    <div class="section-inner">
+      <div class="section-header">
+        <div class="eyebrow">University of Agriculture, Peshawar — ICS/IT</div>
+        <h2 class="section-title">About <span class="g">Tradify</span></h2>
+      </div>
+      <div class="about-grid" style="margin-bottom:3rem">
+        <div class="about-text">
+          <p>Tradify is a Final Year Project developed by BSIT students (Session 2022–2026) at the Institute of Computer Science and Information Technology, University of Agriculture, Peshawar.</p>
+          <p>The platform addresses a real gap in Pakistan's digital finance ecosystem — the lack of a unified, risk-free, locally-built trading education and community platform combining live charts, portfolio simulation, and knowledge sharing.</p>
+          <p>Built using the MERN stack with Firebase backend, TradingView chart integration, and real-time Firestore sync.</p>
+        </div>
+        <div>
+          <ul class="feature-list">
+            <li>Live market data for Gold, Bitcoin, Forex, and Global Stocks</li>
+            <li>Paper trading simulation with virtual PKR 100,000 balance</li>
+            <li>Community-driven trading analysis and blogging platform</li>
+            <li>TradingView-powered professional charts with multiple timeframes</li>
+            <li>Price alert system with in-app notifications</li>
+            <li>Firebase Auth + Firestore real-time backend</li>
+            <li>Fullscreen & resizable live chart on Charts page</li>
+            <li>Designed for Pakistani context with local market focus</li>
+          </ul>
+        </div>
+      </div>
+      <div class="divider" style="margin:0 0 2.5rem"></div>
+      <div class="eyebrow" style="margin-bottom:1.2rem">Development Team</div>
+      <div class="team-grid">
+        <div class="team-card"><div class="team-avatar">👨‍💻</div><div class="team-name">Shahab</div><div class="team-roll" style="margin-bottom:0.3rem">Roll No. 163 · 2022-Agr-U-50870</div><div class="team-role">Frontend Developer</div></div>
+        <div class="team-card"><div class="team-avatar">🚀</div><div class="team-name">Muhammad Ahmad Jamal</div><div class="team-roll" style="margin-bottom:0.3rem">Roll No. 174 · 2022-Agr-U-50881</div><div class="team-role">Full-Stack Lead</div></div>
+        <div class="team-card"><div class="team-avatar">⚙️</div><div class="team-name">Hubab Ali</div><div class="team-roll" style="margin-bottom:0.3rem">Roll No. 220 · 2022-Agr-U-50927</div><div class="team-role">Backend Developer</div></div>
+        <div class="team-card"><div class="team-avatar">🎓</div><div class="team-name">Mr. Muhammad Tariq</div><div class="team-roll" style="margin-bottom:0.3rem">Lecturer ICS/IT</div><div class="team-role">Project Supervisor</div></div>
+      </div>
+      <div style="margin-top:2.5rem;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.5rem">
+        <div class="eyebrow" style="margin-bottom:1rem">Tech Stack</div>
+        <div style="display:flex;gap:0.7rem;flex-wrap:wrap">
+          <span style="padding:0.35rem 0.8rem;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--green)">MongoDB</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--cyan)">Express.js</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--cyan)">React.js</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--green)">Node.js</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(245,200,66,0.1);border:1px solid rgba(245,200,66,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--gold)">Firebase Auth</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(245,200,66,0.1);border:1px solid rgba(245,200,66,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--gold)">Firestore</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(124,92,191,0.1);border:1px solid rgba(124,92,191,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:#b39ddb">JWT Auth</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(245,200,66,0.1);border:1px solid rgba(245,200,66,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--gold)">TradingView API</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--cyan)">Alpha Vantage</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--green)">Recharts</span>
+          <span style="padding:0.35rem 0.8rem;background:rgba(245,200,66,0.1);border:1px solid rgba(245,200,66,0.2);border-radius:6px;font-family:var(--mono);font-size:0.8rem;color:var(--gold)">Vercel + Render</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Tradify</div>
+  <div class="footer-sub">Smart Trading · Community Analysis · Live Charts · Firebase Backend</div>
+  <div class="footer-links">
+    <a onclick="showPage('home')">Home</a>
+    <a onclick="showPage('markets')">Markets</a>
+    <a onclick="showPage('charts')">Live Charts</a>
+    <a onclick="showPage('blog')">Blog</a>
+    <a onclick="showPage('about')">About</a>
+    <a onclick="guardedOpenModal()">Write Blog</a>
+  </div>
+  <div class="footer-copy">© 2026 Tradify · FYP BSIT 2022–2026 · ICS/IT, University of Agriculture Peshawar · Supervised by Mr. Muhammad Tariq</div>
+</footer>
+
+<!-- ██ WRITE BLOG MODAL ██ -->
+<div class="modal-overlay" id="blogModal">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <div class="modal-title">✍ Write Your Analysis</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Your Name</label>
+        <input type="text" class="form-input" id="authorName" placeholder="e.g. Ahmad Jamal" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-select" id="blogCat">
+          <option value="Gold">🥇 Gold</option>
+          <option value="Bitcoin">₿ Bitcoin</option>
+          <option value="Forex">💱 Forex</option>
+          <option value="Stocks">📈 Stocks</option>
+          <option value="Analysis">🔬 Market Analysis</option>
+          <option value="Crypto">🪙 Crypto</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Blog Title</label>
+      <input type="text" class="form-input" id="blogTitle" placeholder="e.g. Gold Breaks $3000 — What Comes Next?" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Asset / Ticker Tag</label>
+      <input type="text" class="form-input" id="blogAsset" placeholder="e.g. XAUUSD, BTC, EUR/USD" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Your Analysis</label>
+      <textarea class="form-textarea" id="blogContent" placeholder="Share your market analysis, trade setup, or insight..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Sentiment</label>
+        <select class="form-select" id="blogSentiment">
+          <option value="Bullish 🟢">Bullish 🟢</option>
+          <option value="Bearish 🔴">Bearish 🔴</option>
+          <option value="Neutral ⚪">Neutral ⚪</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Timeframe</label>
+        <select class="form-select" id="blogTF">
+          <option>Short Term (1-7 days)</option>
+          <option>Medium Term (1-4 weeks)</option>
+          <option>Long Term (1-6 months)</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-gold" style="width:100%;justify-content:center;padding:0.75rem" onclick="submitBlog()">🚀 Publish Analysis</button>
+  </div>
+</div>
+
+<!-- NOTIFICATION -->
+<div class="notif" id="notif"><span class="notif-icon">✓</span><span id="notifText">Done!</span></div>
+
+<!-- ██████████████████████████████████████████
+     MAIN JAVASCRIPT
+██████████████████████████████████████████ -->
+<script>
+// ═══════════════════════════════════════
+// PAGE ROUTER
+// ═══════════════════════════════════════
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-links a').forEach(a=>a.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  const nav=document.getElementById('nav-'+id);
+  if(nav) nav.classList.add('active');
+  window.scrollTo(0,0);
+  if(id==='charts') initTV();
+}
+
+// ═══════════════════════════════════════
+// AUTH SYSTEM
+// ═══════════════════════════════════════
+function switchAuthTab(tab){
+  document.getElementById('tabLogin').classList.toggle('active', tab==='login');
+  document.getElementById('tabSignup').classList.toggle('active', tab==='signup');
+  document.getElementById('loginForm').style.display  = tab==='login'  ? 'block':'none';
+  document.getElementById('signupForm').style.display = tab==='signup' ? 'block':'none';
+  const errEl = document.getElementById('authError');
+  errEl.classList.remove('show');
+  errEl.textContent = '';
+}
+
+function showAuthError(msg){
+  const el=document.getElementById('authError');
+  el.textContent=msg; el.classList.add('show');
+}
+
+function fbErrMsg(code){
+  const map={
+    'auth/invalid-email'         : 'Please enter a valid email address.',
+    'auth/user-not-found'        : 'No account found with this email.',
+    'auth/wrong-password'        : 'Incorrect password. Please try again.',
+    'auth/invalid-credential'    : 'Invalid email or password.',
+    'auth/email-already-in-use'  : 'This email is already registered. Try logging in.',
+    'auth/weak-password'         : 'Password must be at least 6 characters.',
+    'auth/too-many-requests'     : 'Too many attempts. Please wait a moment and try again.',
+    'auth/network-request-failed': 'Network error. Check your internet connection.',
+    'auth/user-disabled'         : 'This account has been disabled.',
+    'auth/operation-not-allowed' : 'Email/password login is not enabled. Enable it in Firebase Console → Authentication → Sign-in method.',
+    'auth/configuration-not-found': 'Firebase Auth not configured. Enable Email/Password in Firebase Console → Authentication.',
+  };
+  return map[code] || 'Something went wrong. Please try again.';
+}
+
+/* Poll every 100ms until window.__auth is assigned by the Firebase module */
+function waitForAuth(timeout=8000){
+  if(window.__auth) return Promise.resolve(window.__auth);
+  return new Promise((resolve, reject)=>{
+    const start = Date.now();
+    const iv = setInterval(()=>{
+      if(window.__auth){
+        clearInterval(iv);
+        resolve(window.__auth);
+      } else if(Date.now()-start > timeout){
+        clearInterval(iv);
+        reject(new Error('timeout'));
+      }
+    }, 100);
+  });
+}
+
+async function doLogin(){
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if(!email||!password){ showAuthError('Please enter email and password.'); return; }
+  const btn = document.querySelector('#loginForm .btn-gold');
+  if(btn){ btn.textContent='⏳ Connecting...'; btn.disabled=true; }
+  let auth;
+  try{ auth = await waitForAuth(); }
+  catch{
+    if(btn){ btn.textContent='🔐 Login to Tradify'; btn.disabled=false; }
+    showAuthError('Firebase could not connect. Check your internet and try again.');
+    return;
+  }
+  try{
+    const { signInWithEmailAndPassword } = window.__fb;
+    await signInWithEmailAndPassword(auth, email, password);
+    notify('Welcome back! 🎉','✓');
+    showPage('home');
+  } catch(e){
+    showAuthError(fbErrMsg(e.code));
+  }
+  if(btn){ btn.textContent='🔐 Login to Tradify'; btn.disabled=false; }
+}
+
+async function doSignup(){
+  const name     = document.getElementById('signupName').value.trim();
+  const email    = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  const confirm  = document.getElementById('signupConfirm').value;
+  if(!name||!email||!password){ showAuthError('Please fill all fields.'); return; }
+  if(password!==confirm){ showAuthError('Passwords do not match.'); return; }
+  if(password.length<6){ showAuthError('Password must be at least 6 characters.'); return; }
+  const btn = document.querySelector('#signupForm .btn-gold');
+  if(btn){ btn.textContent='⏳ Connecting...'; btn.disabled=true; }
+  let auth;
+  try{ auth = await waitForAuth(); }
+  catch{
+    if(btn){ btn.textContent='🚀 Create Account'; btn.disabled=false; }
+    showAuthError('Firebase could not connect. Check your internet and try again.');
+    return;
+  }
+  try{
+    const { createUserWithEmailAndPassword, updateProfile } = window.__fb;
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(cred.user, { displayName: name });
+    // Save user doc to Firestore
+    if(window.__db && window.__fb && window.__fb.setDoc){
+      const { doc, setDoc, serverTimestamp } = window.__fb;
+      await setDoc(doc(window.__db,'users', cred.user.uid), {
+        name, email, uid: cred.user.uid, role:'user',
+        createdAt: serverTimestamp(), virtualBalance: 100000
+      });
+    }
+    notify('Account created! Welcome to Tradify 🚀','✓');
+    showPage('home');
+  } catch(e){
+    showAuthError(fbErrMsg(e.code));
+  }
+  if(btn){ btn.textContent='🚀 Create Account'; btn.disabled=false; }
+}
+
+async function doLogout(){
+  if(!window.__auth) return;
+  const { signOut } = window.__fb;
+  await signOut(window.__auth);
+  notify('Logged out successfully.','👋');
+  updateNavAuth(null);
+}
+
+function updateNavAuth(user){
+  const area = document.getElementById('navAuthArea');
+  const writeBtn = document.getElementById('writeBlogBtn');
+  if(user){
+    const initials = (user.displayName||user.email||'U').charAt(0).toUpperCase();
+    area.innerHTML = `
+      <div class="user-badge" onclick="doLogout()" title="Click to logout">
+        <div class="ub-avatar">${initials}</div>
+        <span style="font-size:0.82rem;color:var(--text)">${user.displayName||user.email.split('@')[0]}</span>
+        <span style="color:var(--muted);font-size:0.75rem">↩ Logout</span>
+      </div>`;
+    if(writeBtn) writeBtn.style.display='inline-flex';
+    // inject write blog into nav-right
+    const wr = document.createElement('button');
+    wr.className='btn btn-gold'; wr.style.fontSize='0.82rem';
+    wr.textContent='✍ Write Blog'; wr.onclick=openModal;
+    area.appendChild(wr);
+  } else {
+    area.innerHTML=`<button class="btn btn-outline" onclick="showPage('auth')" style="font-size:0.82rem">🔐 Login</button>`;
+  }
+}
+
+// Listen for auth state changes
+window.addEventListener('auth-change', e=>{
+  updateNavAuth(e.detail);
+  if(e.detail){
+    const n = document.getElementById('authorName');
+    if(n && !n.value) n.value = e.detail.displayName||'';
+  }
+});
+
+function guardedOpenModal(){
+  if(!window.__user){ showPage('auth'); notify('Please login to write a blog post 🔐','⚠️'); return; }
+  openModal();
+}
+
+// ═══════════════════════════════════════
+// MARKET DATA (live simulation)
+// ═══════════════════════════════════════
+const marketData=[
+  {sym:'BTC',name:'Bitcoin',cat:'crypto',price:67843,h:69210,l:66540,vol:'38.2B',icon:'₿'},
+  {sym:'ETH',name:'Ethereum',cat:'crypto',price:3541,h:3680,l:3490,vol:'18.4B',icon:'Ξ'},
+  {sym:'BNB',name:'BNB',cat:'crypto',price:598,h:615,l:587,vol:'2.1B',icon:'🔶'},
+  {sym:'SOL',name:'Solana',cat:'crypto',price:182,h:191,l:177,vol:'3.8B',icon:'◎'},
+  {sym:'XRP',name:'Ripple',cat:'crypto',price:0.624,h:0.641,l:0.609,vol:'1.9B',icon:'✦'},
+  {sym:'ADA',name:'Cardano',cat:'crypto',price:0.489,h:0.502,l:0.474,vol:'0.9B',icon:'⬟'},
+  {sym:'XAUUSD',name:'Gold',cat:'gold',price:3321.50,h:3341,l:3299,vol:'128.4B',icon:'🥇'},
+  {sym:'XAGUSD',name:'Silver',cat:'gold',price:33.24,h:33.89,l:32.98,vol:'8.2B',icon:'🥈'},
+  {sym:'PLATINUM',name:'Platinum',cat:'gold',price:1042,h:1058,l:1029,vol:'1.4B',icon:'⬡'},
+  {sym:'EURUSD',name:'Euro / USD',cat:'forex',price:1.0821,h:1.0845,l:1.0798,vol:'—',icon:'€'},
+  {sym:'GBPUSD',name:'GBP / USD',cat:'forex',price:1.2743,h:1.2780,l:1.2715,vol:'—',icon:'£'},
+  {sym:'USDPKR',name:'USD / PKR',cat:'forex',price:278.42,h:279.10,l:277.80,vol:'—',icon:'🇵🇰'},
+  {sym:'USDJPY',name:'USD / JPY',cat:'forex',price:157.32,h:157.80,l:156.90,vol:'—',icon:'¥'},
+  {sym:'USDCAD',name:'USD / CAD',cat:'forex',price:1.3612,h:1.3640,l:1.3590,vol:'—',icon:'🍁'},
+  {sym:'AAPL',name:'Apple Inc.',cat:'stocks',price:213.49,h:215.80,l:211.90,vol:'52.1M',icon:'🍎'},
+  {sym:'TSLA',name:'Tesla Inc.',cat:'stocks',price:248.23,h:252.60,l:245.10,vol:'89.4M',icon:'⚡'},
+  {sym:'MSFT',name:'Microsoft',cat:'stocks',price:441.23,h:445.50,l:438.70,vol:'18.2M',icon:'🪟'},
+  {sym:'NVDA',name:'NVIDIA',cat:'stocks',price:1089.50,h:1102.00,l:1078.00,vol:'43.8M',icon:'🟩'},
+  {sym:'AMZN',name:'Amazon',cat:'stocks',price:191.32,h:193.80,l:189.50,vol:'32.1M',icon:'📦'},
+  {sym:'GOOGL',name:'Alphabet',cat:'stocks',price:178.45,h:180.20,l:176.80,vol:'21.3M',icon:'🔍'},
+  {sym:'SPX',name:'S&P 500',cat:'indices',price:5432,h:5467,l:5398,vol:'—',icon:'📊'},
+  {sym:'NDX',name:'NASDAQ 100',cat:'indices',price:19284,h:19421,l:19180,vol:'—',icon:'📈'},
+  {sym:'DJI',name:'Dow Jones',cat:'indices',price:39842,h:40120,l:39650,vol:'—',icon:'🏛'},
+];
+
+let liveData=marketData.map(d=>({...d,change:(Math.random()*6-3).toFixed(2)}));
+
+function randWalk(){
+  liveData=liveData.map(d=>{
+    const pct=(Math.random()-0.497)*0.001;
+    d.price=parseFloat((d.price*(1+pct)).toFixed(d.price>100?2:d.price>1?4:6));
+    d.change=parseFloat((parseFloat(d.change)+(Math.random()-0.5)*0.08).toFixed(2));
+    return d;
+  });
+  renderTicker(); renderWatchlist();
+  if(document.getElementById('page-markets').classList.contains('active')) renderMarketTable(currentCat);
+}
+setInterval(randWalk,4000);
+
+function renderTicker(){
+  const items=liveData.slice(0,14);
+  const html=items.concat(items).map(d=>`<span class="tick-item"><span class="tick-name">${d.sym}</span><span class="tick-price">${d.price.toLocaleString()}</span><span class="${d.change>=0?'tick-up':'tick-dn'}">${d.change>=0?'+':''}${d.change}%</span></span>`).join('');
+  document.getElementById('tickerScroll').innerHTML=html;
+}
+renderTicker();
+
+function renderWatchlist(){
+  const picks=['XAUUSD','BTC','ETH','EURUSD','TSLA','SPX'];
+  const el=document.getElementById('homeWatchlist');
+  if(!el)return;
+  el.innerHTML=picks.map(s=>{
+    const d=liveData.find(x=>x.sym===s)||{sym:s,name:s,price:0,change:0,icon:'—'};
+    const up=d.change>=0;
+    return`<div class="wl-card" onclick="showPage('charts')">
+      <div class="wl-sym">${d.icon} ${d.sym}</div>
+      <div class="wl-name">${d.name}</div>
+      <div class="wl-price ${up?'up':'dn'}">${d.price.toLocaleString()}</div>
+      <div class="wl-change ${up?'up':'dn'}">${up?'▲':'▼'} ${Math.abs(d.change)}%</div>
+    </div>`;
+  }).join('');
+}
+renderWatchlist();
+
+let currentCat='all';
+function filterMarket(cat,el){
+  currentCat=cat;
+  document.querySelectorAll('#marketTabs .asset-tab').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderMarketTable(cat);
+}
+function renderMarketTable(cat){
+  const rows=liveData.filter(d=>cat==='all'||d.cat===cat);
+  const tbody=document.getElementById('marketTable');
+  if(!tbody)return;
+  tbody.innerHTML=rows.map((d,i)=>{
+    const up=d.change>=0;
+    return`<tr>
+      <td style="color:var(--muted);font-family:var(--mono);font-size:0.8rem">${i+1}</td>
+      <td><span class="sym">${d.icon} ${d.sym}</span><br><span style="font-size:0.77rem;color:var(--muted)">${d.name}</span></td>
+      <td><span style="font-size:0.78rem;text-transform:capitalize;color:var(--muted)">${d.cat}</span></td>
+      <td class="price" style="font-family:var(--mono);font-weight:700">$${d.price.toLocaleString()}</td>
+      <td><span class="${up?'up':'dn'}" style="font-family:var(--mono)">${up?'+':''}${d.change}%</span></td>
+      <td style="font-family:var(--mono);font-size:0.85rem;color:var(--muted)">$${d.h.toLocaleString()}</td>
+      <td style="font-family:var(--mono);font-size:0.85rem;color:var(--muted)">$${d.l.toLocaleString()}</td>
+      <td style="font-family:var(--mono);font-size:0.82rem;color:var(--muted)">${d.vol}</td>
+      <td><button class="btn btn-outline" style="padding:0.25rem 0.6rem;font-size:0.75rem" onclick="showPage('charts')">📈</button></td>
+    </tr>`;
+  }).join('');
+}
+renderMarketTable('all');
+
+// ═══════════════════════════════════════
+// TRADINGVIEW MAIN CHART
+// ═══════════════════════════════════════
+let tvSymbol='TVC:GOLD';
+let tvInterval='D';
+let tvLoaded=false;
+
+function initTV(){
+  if(tvLoaded) return;
+  tvLoaded=true;
+  buildTVChart();
+}
+
+function buildTVChart(){
+  const container=document.getElementById('tvWidgetContainer');
+  container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-family:var(--mono);font-size:0.85rem">⏳ Loading chart…</div>';
+  if(window.TradingView){
+    _spawnTV();
+  } else {
+    const s=document.createElement('script');
+    s.src='https://s3.tradingview.com/tv.js';
+    s.async=true;
+    s.onload=_spawnTV;
+    document.head.appendChild(s);
+  }
+}
+
+function _spawnTV(){
+  const container=document.getElementById('tvWidgetContainer');
+  container.innerHTML='';
+  new TradingView.widget({
+    symbol:tvSymbol, interval:tvInterval,
+    container_id:'tvWidgetContainer',
+    width:'100%', height:'100%',
+    theme:'dark', style:'1', locale:'en',
+    toolbar_bg:'#0d1117',
+    enable_publishing:false, allow_symbol_change:true,
+    hide_side_toolbar:false, withdateranges:true,
+    timezone:'Asia/Karachi', hide_legend:false, save_image:false,
+    studies:['RSI@tv-basicstudies','MACD@tv-basicstudies'],
+  });
+}
+
+/* ── chart analysis history stored in sessionStorage ── */
+let __chartHistory = JSON.parse(sessionStorage.getItem('tradify_chart_history')||'[]');
+
+function fmtAnalysisDate(d){
+  return d.toLocaleString('en-PK',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'Asia/Karachi'});
+}
+function timeSince(ts){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60) return 'just now';
+  if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+function updateAnalysisBar(label, sym, iv){
+  const now = new Date();
+  const ts  = now.getTime();
+  // save to history
+  __chartHistory.unshift({label, sym, iv, ts});
+  if(__chartHistory.length>50) __chartHistory.pop();
+  sessionStorage.setItem('tradify_chart_history', JSON.stringify(__chartHistory));
+  // update bar
+  const ivLabel = {1:'1 Min',5:'5 Min',15:'15 Min',60:'1 Hour',D:'1 Day',W:'1 Week',M:'1 Month'}[iv]||iv;
+  const el_time    = document.getElementById('cabViewedTime');
+  const el_asset   = document.getElementById('cabAsset');
+  const el_iv      = document.getElementById('cabInterval');
+  const el_session = document.getElementById('cabSession');
+  if(el_time)    el_time.textContent    = fmtAnalysisDate(now);
+  if(el_asset)   el_asset.textContent   = label + ' (' + sym + ')';
+  if(el_iv)      el_iv.textContent      = ivLabel;
+  if(el_session) el_session.textContent = timeSince(ts);
+  // also render history panel if open
+  renderChartHistory();
+}
+
+function renderChartHistory(){
+  const el = document.getElementById('chartHistoryList');
+  if(!el) return;
+  if(!__chartHistory.length){ el.innerHTML='<div style="color:var(--muted);font-size:0.8rem;padding:0.5rem">No history yet this session.</div>'; return; }
+  el.innerHTML = __chartHistory.map((h,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.45rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--mono);font-size:0.76rem;${i===0?'color:var(--gold)':'color:var(--muted)'}">
+      <span>${i===0?'🔴 ':'▸ '}<b style="color:var(--cyan)">${h.sym}</b> · ${h.label}</span>
+      <span style="text-align:right">${{1:'1m',5:'5m',15:'15m',60:'1H',D:'1D',W:'1W',M:'1M'}[h.iv]||h.iv} · ${timeSince(h.ts)}</span>
+    </div>`).join('');
+}
+
+function toggleChartHistory(){
+  const panel = document.getElementById('chartHistoryPanel');
+  if(!panel) return;
+  const open = panel.style.display==='block';
+  panel.style.display = open ? 'none' : 'block';
+  if(!open) renderChartHistory();
+}
+
+function loadChart(sym,label,el){
+  const map={
+    XAUUSD:'TVC:GOLD',BTCUSD:'BINANCE:BTCUSDT',ETHUSD:'BINANCE:ETHUSDT',
+    EURUSD:'FX:EURUSD',GBPUSD:'FX:GBPUSD',USDPKR:'FX:USDPKR',
+    AAPL:'NASDAQ:AAPL',TSLA:'NASDAQ:TSLA',XAGUSD:'TVC:SILVER',SOLUSD:'BINANCE:SOLUSDT'
+  };
+  tvSymbol=map[sym]||sym;
+  document.getElementById('chartTitle').textContent=`${label} — ${sym}`;
+  document.querySelectorAll('#chartAssetTabs .asset-tab').forEach(b=>b.classList.remove('active'));
+  if(el) el.classList.add('active');
+  updateAnalysisBar(label, sym, tvInterval);
+  buildTVChart();
+}
+
+function setTVInterval(iv, el){
+  document.querySelectorAll('.chart-tab').forEach(b=>b.classList.remove('active'));
+  if(el) el.classList.add('active');
+  tvInterval=iv;
+  // update analysis bar with new interval
+  const curLabel = (document.getElementById('chartTitle')||{}).textContent||'';
+  const sym = tvSymbol.split(':')[1]||tvSymbol;
+  updateAnalysisBar(curLabel.split(' — ')[0]||sym, sym, iv);
+  buildTVChart();
+}
+
+// ─── FULLSCREEN TOGGLE ───
+let isFullscreen=false;
+function toggleFullscreen(){
+  const wrap=document.getElementById('chartFsWrap');
+  const btn=document.getElementById('btnFs');
+  isFullscreen=!isFullscreen;
+  if(isFullscreen){
+    wrap.classList.add('fullscreen');
+    btn.textContent='⤡ Exit Full';
+    btn.classList.add('active');
+    document.body.style.overflow='hidden';
+  } else {
+    wrap.classList.remove('fullscreen');
+    btn.textContent='⤢ Fullscreen';
+    btn.classList.remove('active');
+    document.body.style.overflow='';
+    const embed=document.getElementById('chartEmbedDiv');
+    if(!isMini) embed.style.height='600px';
+  }
+  setTimeout(buildTVChart,250);
+}
+
+// ─── MINI TOGGLE ───
+let isMini=false;
+function toggleMiniChart(){
+  if(isFullscreen) return;
+  isMini=!isMini;
+  const embed=document.getElementById('chartEmbedDiv');
+  const btn=document.getElementById('btnMini');
+  embed.style.height=isMini?'200px':'600px';
+  btn.textContent=isMini?'⊞ Normal':'⊟ Mini';
+  btn.classList.toggle('active',isMini);
+  setTimeout(buildTVChart,350);
+}
+
+// ESC exits fullscreen
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&isFullscreen) toggleFullscreen();
+});
+
+// ─── DRAG RESIZE ───
+(function(){
+  const bar=document.getElementById('resizeBar');
+  if(!bar)return;
+  let drag=false, startY=0, startH=0;
+  bar.addEventListener('mousedown',e=>{
+    drag=true; startY=e.clientY;
+    startH=document.getElementById('chartEmbedDiv').offsetHeight;
+    document.body.style.cursor='ns-resize';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    const newH=Math.max(180,Math.min(window.innerHeight-180, startH+(e.clientY-startY)));
+    document.getElementById('chartEmbedDiv').style.height=newH+'px';
+  });
+  document.addEventListener('mouseup',()=>{
+    if(!drag)return;
+    drag=false;
+    document.body.style.cursor='';
+    setTimeout(buildTVChart,80);
+  });
+  // Touch support
+  bar.addEventListener('touchstart',e=>{
+    drag=true; startY=e.touches[0].clientY;
+    startH=document.getElementById('chartEmbedDiv').offsetHeight;
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!drag)return;
+    const newH=Math.max(180,Math.min(window.innerHeight-180,startH+(e.touches[0].clientY-startY)));
+    document.getElementById('chartEmbedDiv').style.height=newH+'px';
+  },{passive:true});
+  document.addEventListener('touchend',()=>{
+    if(!drag)return; drag=false; setTimeout(buildTVChart,80);
+  });
+})();
+
+// ═══════════════════════════════════════
+// BLOG SYSTEM — Firebase + Local Fallback
+// ═══════════════════════════════════════
+const tagClass={Gold:'tag-gold',Bitcoin:'tag-btc',Forex:'tag-forex',Stocks:'tag-stock',Analysis:'tag-analysis',Crypto:'tag-btc'};
+const icons={Gold:'🥇',Bitcoin:'₿',Forex:'💱',Stocks:'📈',Analysis:'🔬',Crypto:'🪙'};
+
+let localBlogs=[
+  {id:1,author:'Ahmad Jamal',cat:'Gold',title:'Gold Breaks $3300 — Bulls Still in Control',asset:'XAUUSD',excerpt:'Following the breakout above the $3,280 resistance level, gold has continued its bullish momentum. Key support sits at $3,260 and we expect a move toward $3,400.',sentiment:'Bullish 🟢',tf:'Short Term (1-7 days)',likes:42,date:'Sat, Jun 20, 2026 at 10:30 AM (PKT)',ts:{seconds:1750405800}},
+  {id:2,author:'Shahab',cat:'Bitcoin',title:'BTC Consolidation Phase — Accumulation Zone',asset:'BTCUSDT',excerpt:'Bitcoin has been trading sideways between $65k–$70k for three weeks. On-chain data shows strong accumulation from long-term holders.',sentiment:'Bullish 🟢',tf:'Medium Term (1-4 weeks)',likes:87,date:'Fri, Jun 19, 2026 at 02:15 PM (PKT)',ts:{seconds:1750319100}},
+  {id:3,author:'Hubab Ali',cat:'Forex',title:'EUR/USD: Dollar Weakness Supports Recovery',asset:'EURUSD',excerpt:'The US Dollar Index has been weakening since the Fed signaled a pause. EUR/USD is finding support at 1.0780 and a breakout above 1.0850 could trigger a move to 1.0950.',sentiment:'Bullish 🟢',tf:'Medium Term (1-4 weeks)',likes:31,date:'Thu, Jun 18, 2026 at 09:00 AM (PKT)',ts:{seconds:1750228200}},
+  {id:4,author:'Market Analyst',cat:'Analysis',title:'PSX KSE-100 Technical Review — Cup & Handle',asset:'KSE100',excerpt:'KSE-100 is forming a classic cup-and-handle pattern on the weekly chart. A sustained move above 78,000 could see a rally to 85,000.',sentiment:'Bullish 🟢',tf:'Long Term (1-6 months)',likes:58,date:'Wed, Jun 17, 2026 at 07:45 PM (PKT)',ts:{seconds:1750155900}},
+  {id:5,author:'Crypto Desk',cat:'Crypto',title:'Ethereum Staking Yield Hits 4.2% — ETH vs Bonds',asset:'ETHUSDT',excerpt:'Ethereum post-Merge staking yield at 4.2% APY makes it increasingly attractive vs fixed income. Institutional inflows into ETH staking protocols continue to rise.',sentiment:'Bullish 🟢',tf:'Long Term (1-6 months)',likes:64,date:'Tue, Jun 16, 2026 at 11:20 AM (PKT)',ts:{seconds:1750056600}},
+  {id:6,author:'Risk Desk',cat:'Stocks',title:'NVIDIA Correction Risk After 180% Run',asset:'NVDA',excerpt:'NVDA has seen a parabolic move driven by AI chip demand. RSI above 78 signals pullback risk to the $950–$1000 range before the next leg higher.',sentiment:'Bearish 🔴',tf:'Short Term (1-7 days)',likes:103,date:'Mon, Jun 15, 2026 at 04:50 PM (PKT)',ts:{seconds:1749988200}},
+];
+
+let blogFilter='all';
+let likedBlogs=new Set(JSON.parse(localStorage.getItem('tradify_likes')||'[]'));
+function saveLikes(){ localStorage.setItem('tradify_likes',JSON.stringify([...likedBlogs])); }
+
+function getBlogs(){
+  return (window.__fbBlogs&&window.__fbBlogs.length) ? window.__fbBlogs : localBlogs;
+}
+
+function timeSinceTs(ts){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60) return 'just now';
+  if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago';
+  if(s<604800) return Math.floor(s/86400)+'d ago';
+  if(s<2592000) return Math.floor(s/604800)+'w ago';
+  return Math.floor(s/2592000)+'mo ago';
+}
+
+window.renderBlogs = function(container, limit){
+  const search=(document.getElementById('blogSearch')||{value:''}).value.toLowerCase();
+  let list=getBlogs().filter(b=>{
+    const matchCat=blogFilter==='all'||b.cat===blogFilter;
+    const matchSearch=!search||b.title.toLowerCase().includes(search)||b.excerpt.toLowerCase().includes(search)||(b.cat||'').toLowerCase().includes(search);
+    return matchCat&&matchSearch;
+  });
+  if(limit) list=list.slice(0,limit);
+  const el=document.getElementById(container);
+  if(!el)return;
+  el.innerHTML=list.map(b=>`
+    <div class="blog-card">
+      <div class="blog-card-img">
+        ${icons[b.cat]||'📊'}
+        <span class="blog-tag ${tagClass[b.cat]||'tag-analysis'}">${b.cat}</span>
+      </div>
+      <div class="blog-body">
+        <div class="blog-meta">
+          <span>📅 ${b.date||''}</span><span style="color:var(--gold);font-size:0.7rem">${b.ts&&b.ts.seconds ? ' · '+timeSinceTs(b.ts.seconds*1000) : ''}</span>
+          <span>⏱ ${(b.tf||'').split(' ')[0]}</span>
+          <span>${b.sentiment||''}</span>
+        </div>
+        <div class="blog-title">${b.title}</div>
+        <div class="blog-excerpt">${b.excerpt}</div>
+        <div class="blog-footer">
+          <div class="blog-author"><div class="avatar">${(b.author||'A').charAt(0)}</div>${b.author||'Anon'}</div>
+          <div class="blog-likes" onclick="likeBlog('${b.id}',this)">
+            <span>${likedBlogs.has(String(b.id))?'❤️':'🤍'}</span>
+            <span id="likes-${b.id}">${b.likes||0}</span>
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+};
+
+async function likeBlog(id){
+  const sid=String(id);
+  const already=likedBlogs.has(sid);
+  // Firebase like
+  if(window.__db && window.__fb){
+    try{
+      const { doc, updateDoc, increment }=window.__fb;
+      await updateDoc(doc(window.__db,'blogs',sid),{likes:increment(already?-1:1)});
+    } catch(e){}
+  }
+  // Local fallback
+  const b=localBlogs.find(x=>String(x.id)===sid);
+  if(b){ if(already){likedBlogs.delete(sid);b.likes=Math.max(0,(b.likes||1)-1);}else{likedBlogs.add(sid);b.likes=(b.likes||0)+1;} }
+  else{ already?likedBlogs.delete(sid):likedBlogs.add(sid); }
+  saveLikes();
+  renderBlogs('blogGrid');
+  renderBlogs('homeBlogGrid',3);
+}
+
+function setBlogFilter(cat,el){
+  blogFilter=cat;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderBlogs('blogGrid');
+}
+
+renderBlogs('homeBlogGrid',3);
+renderBlogs('blogGrid');
+
+// ═══════════════════════════════════════
+// WRITE BLOG MODAL
+// ═══════════════════════════════════════
+function openModal(){document.getElementById('blogModal').classList.add('open')}
+function closeModal(){document.getElementById('blogModal').classList.remove('open')}
+document.getElementById('blogModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+async function submitBlog(){
+  const title   =document.getElementById('blogTitle').value.trim();
+  const author  =document.getElementById('authorName').value.trim()||(window.__user?.displayName||'Anonymous');
+  const cat     =document.getElementById('blogCat').value;
+  const content =document.getElementById('blogContent').value.trim();
+  const asset   =document.getElementById('blogAsset').value.trim();
+  const sentiment=document.getElementById('blogSentiment').value;
+  const tf      =document.getElementById('blogTF').value;
+  if(!title||!content){notify('Fill in title and analysis!','⚠️');return;}
+
+  const now=new Date();
+  const date=now.toLocaleDateString('en-PK',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  const timeStr=now.toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'Asia/Karachi'});
+  const fullDate=`${date} at ${timeStr} (PKT)`;
+  const blogData={author,cat,title,asset:asset||cat,excerpt:content.slice(0,230)+(content.length>230?'…':''),sentiment,tf,likes:0,date:fullDate};
+
+  // ── Try Firebase first ──
+  let fbOk=false;
+  if(window.__db && window.__fb){
+    try{
+      const { collection, addDoc, serverTimestamp }=window.__fb;
+      await addDoc(collection(window.__db,'blogs'),{...blogData, ts:serverTimestamp(), uid:window.__user?.uid||null});
+      fbOk=true;
+      notify('Published to Firebase! 🔥','✓');
+    } catch(e){}
+  }
+  if(!fbOk){
+    localBlogs.unshift({id:Date.now(),...blogData});
+    renderBlogs('blogGrid');
+    renderBlogs('homeBlogGrid',3);
+    notify('Published locally (configure Firebase for persistence) 🚀','✓');
+  }
+
+  closeModal();
+  ['blogTitle','blogContent','blogAsset'].forEach(id=>document.getElementById(id).value='');
+}
+
+// ═══════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════
+function notify(msg,icon='✓'){
+  const el=document.getElementById('notif');
+  document.getElementById('notifText').textContent=msg;
+  el.querySelector('.notif-icon').textContent=icon+' ';
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),3400);
+}
+
+// ── Simulated price alerts ──
+setTimeout(()=>notify('🥇 Gold crossed $3,325 — Alert triggered!','🔔'),8000);
+setTimeout(()=>notify('₿ BTC up 2.1% in last hour','📈'),18000);
+</script>
+</body>
+</html>
